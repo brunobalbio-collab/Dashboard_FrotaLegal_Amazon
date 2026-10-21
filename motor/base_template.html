@@ -109,7 +109,7 @@
     <button class="tab" data-tab="fuel">Combustível</button>
     <button class="tab" data-tab="bases">Bases (download)</button>
   </div>
-  <div class="ghpub-open"><button class="btn2" id="impOpen" title="Importar bases e gerar o farol automaticamente" style="margin-right:8px;background:#0ea5e9;color:#fff">Importar bases</button><button class="btn2" id="ghOpen" title="Publicar este farol no GitHub">Publicar no GitHub</button></div>
+  <div class="ghpub-open"><button class="btn2" id="impOpen" title="Importar bases e gerar o farol automaticamente" style="margin-right:8px;background:#0ea5e9;color:#fff">Importar bases</button></div>
 </header>
 
 <!-- ============ ABA 0: RESUMO ============ -->
@@ -1171,37 +1171,6 @@ function renderBases(){if(basesDone)return;basesDone=true;const box=el('basesLis
 
 renderResumo();
 </script>
-<div class="ghmask" id="ghMask">
-  <div class="ghmodal" role="dialog" aria-modal="true" aria-label="Publicar no GitHub">
-    <div class="gh-h"><span>Publicar farol no GitHub</span><button class="x" id="ghClose" title="Fechar" aria-label="Fechar">&times;</button></div>
-    <div class="bd">
-      <div class="ghwarn"><b>Como funciona:</b> selecione o arquivo HTML atualizado do farol e clique em publicar &mdash; ele sobe direto para o repositório e o site atualiza sozinho. O token &eacute; usado <b>somente nesta janela</b>, fica na mem&oacute;ria do navegador e <b>nunca</b> &eacute; salvo no arquivo. Use um token com acesso apenas a este reposit&oacute;rio e permiss&atilde;o <b>Contents: Read and write</b>.</div>
-      <div class="ghfield">
-        <label>1. Arquivo do farol (.html) a publicar</label>
-        <label class="ghfile" id="ghFileLbl" for="ghFile">Clique para escolher o arquivo HTML do farol&hellip;</label>
-        <input type="file" id="ghFile" accept=".html,text/html" style="display:none">
-      </div>
-      <div class="ghrow">
-        <div class="ghfield"><label>Usu&aacute;rio/Org</label><input type="text" id="ghOwner" value="brunobalbio-collab" autocomplete="off" spellcheck="false"></div>
-        <div class="ghfield"><label>Reposit&oacute;rio</label><input type="text" id="ghRepo" value="Dashboard_FrotaLegal_Amazon" autocomplete="off" spellcheck="false"></div>
-      </div>
-      <div class="ghrow">
-        <div class="ghfield"><label>Branch</label><input type="text" id="ghBranch" value="main" autocomplete="off" spellcheck="false"></div>
-        <div class="ghfield"><label>Arquivo no reposit&oacute;rio</label><input type="text" id="ghPath" value="index.html" autocomplete="off" spellcheck="false"></div>
-      </div>
-      <div class="ghfield">
-        <label>2. Token de acesso do GitHub (fine-grained PAT)</label>
-        <input type="password" id="ghToken" placeholder="github_pat_..." autocomplete="off" autocapitalize="off" spellcheck="false">
-      </div>
-      <div class="ghhint">O token n&atilde;o &eacute; armazenado. Ele desaparece quando voc&ecirc; fecha esta aba.</div>
-      <div class="ghbtns">
-        <button class="ghcancel" id="ghCancel">Cancelar</button>
-        <button class="ghpub" id="ghDo">Publicar agora</button>
-      </div>
-      <div class="ghlog" id="ghLog"></div>
-    </div>
-  </div>
-</div>
 <script>
 (function(){
   var $=function(id){return document.getElementById(id)};
