@@ -304,15 +304,20 @@ def main():
     log(f"VIAGENS: base(congeladas)={len(base_detail)} novas={len(new_detail)} total={len(detail)}")
 
     # ---- demais tabelas (recompostas) ----
+    # Regra ASDFG: inspecoes de auditor em veiculo SEM CADASTRO (placa ficticia ASDFG) contam
+    # como auditoria. Universo de auditoria = auditor + ASDFG -> alimenta bases.auditor (grafico
+    # 'Auditorias por dia' + detalhe), resumo (KPIs) e anomalias. Placas&Documentos (plc_info) e
+    # Placas Ativas (faturavel) seguem com o insp_seg original (ASDFG fora).
+    seg_aud = insp_seg + E.asdfg_as_seg(sem_cad_recs)
     plc_info = E.build_plc_info(insp, insp_seg, bf["prontuario"])
     fuel_info = E.build_fuel_info(bf["equip"])
     ativas_info = E.build_ativas_info(insp, insp_seg)
-    bases = E.build_bases({"insp": insp, "insp_seg": insp_seg, "placas": []}, insp_info)
+    bases = E.build_bases({"insp": insp, "insp_seg": seg_aud, "placas": []}, insp_info)
     bases["esp"] = D["bases"]["esp"]            # extrato esp: congelado
     placas_stub = {"total": D["esp"]["total"], "cat": D["esp"]["cat"]}
-    resumo = E.build_resumo(detail, insp_seg, insp_info, placas_stub, plc_info, fuel_info, ativas_info)
+    resumo = E.build_resumo(detail, seg_aud, insp_info, placas_stub, plc_info, fuel_info, ativas_info)
     sem_cad = E.build_sem_cad(sem_cad_recs)
-    anom_aud = E.build_anom_aud(insp_seg, week_of)
+    anom_aud = E.build_anom_aud(seg_aud, week_of)
 
     # ---- payload -> index.html ----
     data = build_payload(D, detail, insp_info, plc_info, fuel_info, bases, resumo, sem_cad, anom_aud, ativas_info)

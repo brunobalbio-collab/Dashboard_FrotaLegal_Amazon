@@ -674,7 +674,11 @@ def build_resumo(detail, insp_seg, insp_info, placas_info, plc_info, fuel_info, 
     def mlabel_iso(s):
         try: return f"{MESES[int(s[5:7])]}/{int(s[:4])}"
         except: return ""
-    audCM=len({r["ident"] for r in insp_seg if r.get("data") and mlabel_iso(r["data"])==cm})
+    # Regra ASDFG: inspecoes de auditor em veiculo sem cadastro contam como auditoria.
+    # A contagem DISTINTA de placas usa 'audkey' (placa real p/ ASDFG, senao token unico);
+    # registros normais nao tem audkey -> cai no ident, mantendo os numeros historicos.
+    def _ak(r): return r.get("audkey") or r.get("ident","")
+    audCM=len({_ak(r) for r in insp_seg if r.get("data") and mlabel_iso(r["data"])==cm})
     placasVridCM=len({npl(d[5]) for d in detail if d[12]==cm and d[5]})
     doc=plc_info["doc"]; nt=len(doc["types"])
     comDep=len({r[0] for r in doc["rows"] if any(str(r[3+j]).upper()=="OK" for j in range(nt))})
@@ -692,7 +696,7 @@ def build_resumo(detail, insp_seg, insp_info, placas_info, plc_info, fuel_info, 
             "miguel":len(mig),"soMiguel":len(mig-pre)}
     return {"mesCorrente":cm,"placasAtivas":pa,
       "preViagem":{"total":total,"aderente":c[0],"fora":c[1],"sem":c[2],"semdata":c[3]},
-      "auditoria":{"mes":cm,"inspecionados":audCM,"placasVrid":placasVridCM,"totalAudit":len({r["ident"] for r in insp_seg}),"totalAuditorias":len(insp_seg),"noSistema":doc["total_placas"]},
+      "auditoria":{"mes":cm,"inspecionados":audCM,"placasVrid":placasVridCM,"totalAudit":len({_ak(r) for r in insp_seg}),"totalAuditorias":len(insp_seg),"noSistema":doc["total_placas"]},
       "documentacao":{"noSistema":doc["total_placas"],"comDeposito":comDep},
       "anomalias":{"total":len(agg),"comAnomalia":sum(1 for a in agg if a[4]==1),"itensNok":sum(len(r[8]) for r in nokr),"transp":len({r[2] for r in nokr})},
       "semEsp":{"total":placas_info["total"],"comInsp":cat.get("aderente",0)+cat.get("fora",0),"semInsp":cat.get("sem",0),"fora":cat.get("fora",0)},
@@ -1272,6 +1276,29 @@ def build_sem_cad(recs):
     nok=sum(1 for x in rows if x[5])
     return {"total":len(rows),"placas":placas,"nok":nok,"rows":rows}
 
+def asdfg_as_seg(sem_cad_recs):
+    """Regra de negocio: a inspecao de auditor feita em veiculo SEM CADASTRO no sistema
+    (placa ficticia ASDFG) tambem CONTA como auditoria do auditor. Converte cada registro
+    da aba 'Sem cadastro' em um registro no formato de insp_seg para entrar nas contagens
+    de auditoria (KPIs, 'Auditorias por dia', anomalias), SEM sair da aba 'Sem cadastro'.
+      - ident: placa real informada na observacao quando houver; senao 'ASDFG'.
+      - audkey (contagem distinta de placas): placa real quando houver; senao token unico
+        por lancamento (cada auditoria = 1), conforme combinado.
+    Nao afeta Placas & Documentos nem Placas Ativas (faturavel): esses seguem usando o
+    insp_seg original (ASDFG continua de fora)."""
+    out=[]
+    for i,r in enumerate(sem_cad_recs):
+        pr=str(r.get("placa_real","") or "").strip().upper()
+        rec=dict(r)
+        rec["ident"]=pr or SEM_CADASTRO_PLATE
+        rec["audkey"]=pr or ("%s#%d"%(SEM_CADASTRO_PLATE,i))
+        rec["transp"]=(str(r.get("transp_real","") or "").strip() or r.get("transp","") or "(sem transp.)")
+        rec.setdefault("vrid","")
+        rec.setdefault("carreta","")
+        rec.setdefault("transpv","")
+        out.append(rec)
+    return out
+
 def build_anom_aud(insp_seg, week_of):
     """Melhoria 2 (aba Anomalias, origem Auditoria): anomalias das inspecoes de auditoria do MIGUEL.
     Reaproveita build_insp_info montando registros compativeis (sem vrid/carreta)."""
@@ -1295,10 +1322,14 @@ def build_all(b):
     plc_info = build_plc_info(b.get("insp",[]), b.get("insp_seg",[]), b.get("prontuario",[]))
     fuel_info = build_fuel_info(b.get("equip",[]))
     ativas_info = build_ativas_info(b.get("insp",[]), b.get("insp_seg",[]))   # fonte: checklists (pre-uso OU Miguel)
-    bases = build_bases(b, insp_info)
-    resumo = build_resumo(detail, b.get("insp_seg",[]), insp_info, placas_info, plc_info, fuel_info, ativas_info)
+    # Universo de auditoria = inspecoes de auditor + ASDFG (veic. sem cadastro, que agora contam).
+    # Usado em bases.auditor (grafico 'Auditorias por dia' + detalhe), resumo e anomalias.
+    # Placas&Documentos (plc) e Placas Ativas (faturavel) seguem com o insp_seg original.
+    seg_aud = b.get("insp_seg",[]) + asdfg_as_seg(b.get("sem_cad",[]))
+    bases = build_bases({**b,"insp_seg":seg_aud}, insp_info)
+    resumo = build_resumo(detail, seg_aud, insp_info, placas_info, plc_info, fuel_info, ativas_info)
     sem_cad = build_sem_cad(b.get("sem_cad",[]))
-    anom_aud = build_anom_aud(b.get("insp_seg",[]), week_of)
+    anom_aud = build_anom_aud(seg_aud, week_of)
     return detail, insp_info, placas_info, plc_info, fuel_info, bases, resumo, sem_cad, anom_aud, ativas_info
 
 def main():
