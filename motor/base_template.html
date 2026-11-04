@@ -1344,7 +1344,7 @@ renderResumo();
     log('Modo: '+modo);
     log('Lendo e preparando '+chosen.length+' arquivo(s)...');
     Promise.all(chosen.map(function(x){return readB64(x.f).then(function(b64){
-      var path = x.s.kind==='inspecoes' ? ('dados/inspecoes_'+st+'.xlsx') : names[x.s.kind];
+      var path = (x.s.kind==='inspecoes'||x.s.kind==='viagens') ? ('dados/'+x.s.kind+'_'+st+'.xlsx') : names[x.s.kind];
       return {path:path, b64:b64, name:x.f.name};
     });})).then(function(files){
       var baseCommitSha, baseTreeSha, tree=[];

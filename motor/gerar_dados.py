@@ -146,10 +146,15 @@ def read_dados(dados_dir):
         return ("00000000", "000000", b)
     inspec  = sorted((f for f, k in kinds.items() if k == "inspecoes"),
                      key=_insp_recency, reverse=True)
+    # viagens: ACUMULA igual as inspecoes. Ordena do export MAIS RECENTE p/ o mais
+    # antigo (mesma chave de recencia pelo nome viagens_AAAAMMDD-HHMMSS); nomes sem data
+    # (ex.: o antigo viagens.xlsx fixo) contam como mais antigos. O dedup por VRID em
+    # parse_novo mantem a 1a ocorrencia -> o export mais novo vence.
+    viagens = sorted(viagens, key=_insp_recency, reverse=True)
     equips  = [f for f, k in kinds.items() if k == "equipamentos"]
     pronts  = [f for f, k in kinds.items() if k == "prontuario"]
     newest = lambda xs: sorted(xs, key=os.path.getmtime, reverse=True)[0] if xs else None
-    return {"viagens": newest(viagens), "inspecoes": inspec,
+    return {"viagens": viagens, "inspecoes": inspec,
             "equip": newest(equips), "pront": newest(pronts),
             "n_viagens": len(viagens), "n_inspecoes": len(inspec),
             "n_equip": len(equips), "n_pront": len(pronts)}
@@ -169,11 +174,18 @@ def parse_novo(dd):
     pront = E.parse_prontuario(dd["pront"])[0] if dd["pront"] else []
     equip = E.parse_equipamentos(dd["equip"]) if dd["equip"] else []
     # viagens -> linhas no formato banco (vrid,car,route,lane,wy,tiso,plate)
-    new_vrows = []
-    if dd["viagens"]:
-        recs, _ = E.normalize_trips(dd["viagens"])
+    # ACUMULA todos os arquivos de viagens (dd["viagens"] vem do mais recente p/ o mais
+    # antigo). Dedup por (vrid, horario, placa) mantendo a 1a ocorrencia = export mais
+    # novo vence. Multidrop (varias pernas do mesmo VRID) e preservado: pernas tem
+    # horarios diferentes, entao nao colidem na chave; a 1a perna e escolhida depois.
+    new_vrows = []; _seen_v = set()
+    for f in dd["viagens"]:
+        recs, _ = E.normalize_trips(f)
         for rec in recs:
             tiso = rec[5].isoformat() if isinstance(rec[5], datetime) else ""
+            k = (E.nvr(rec[0]), tiso, str(rec[6]).strip().upper())
+            if k in _seen_v: continue
+            _seen_v.add(k)
             new_vrows.append((rec[0], rec[1], rec[2], rec[3], rec[4], tiso, rec[6]))
     return new_insp, new_itens, new_seg, pront, equip, new_vrows
 
