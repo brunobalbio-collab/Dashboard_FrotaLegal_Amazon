@@ -28,6 +28,16 @@
   .btn{padding:8px 14px;border:none;border-radius:8px;background:var(--navy);color:#fff;font-size:13px;font-weight:600;cursor:pointer}
   .btn.ghost{background:#fff;color:var(--navy);border:1px solid var(--line)}
   .btn:hover{opacity:.9}
+  .ms{position:relative}
+  .msBtn{padding:8px 28px 8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fff;min-width:140px;max-width:230px;text-align:left;cursor:pointer;position:relative;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .msBtn::after{content:"\25BE";position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+  .msPanel{position:absolute;z-index:40;top:calc(100% + 4px);left:0;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.12);padding:8px;width:240px}
+  .msPanel[hidden]{display:none}
+  .msSearch{width:100%;min-width:0;max-width:none;box-sizing:border-box;margin-bottom:6px}
+  .msList{max-height:220px;overflow:auto;display:flex;flex-direction:column;gap:2px}
+  .msItem{display:flex;align-items:center;gap:8px;font-size:13px;padding:4px 6px;border-radius:6px;cursor:pointer}
+  .msItem:hover{background:#f1f5f9}
+  .msItem input{min-width:0;max-width:none;margin:0}
   .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:14px;margin-bottom:18px}
   .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;position:relative;overflow:hidden}
   .kpi .lbl{font-size:12px;color:var(--muted);font-weight:600}
@@ -217,7 +227,7 @@
     <div class="f"><label>Origem</label><select id="aOrigem"><option value="preuso">Pré-uso (checklist)</option><option value="aud">Auditoria (Miguel)</option></select></div>
     <div class="f"><label>Semana</label><select id="aWeek"></select></div>
     <div class="f"><label>Mês</label><select id="aMonth"></select></div>
-    <div class="f"><label>Transportadora</label><select id="aCarrier"></select></div>
+    <div class="f"><label>Transportadora</label><div class="ms" id="aCarrierMs"><button type="button" class="msBtn" id="aCarrierBtn">Todas</button><div class="msPanel" id="aCarrierPanel" hidden><input type="text" class="msSearch" id="aCarrierSearch" placeholder="Buscar..."><div class="msList" id="aCarrierList"></div></div></div></div>
     <div class="f"><label>Tipo de veículo</label><select id="aTipo"></select></div>
     <div class="f"><label>Buscar</label><input type="text" id="aSearch" placeholder="placa / transportadora / item"></div>
     <button class="btn ghost" id="aReset">Limpar</button>
@@ -653,22 +663,37 @@ function drawTable2(){
 
 // ================= ABA 3 (ANOMALIAS) =================
 const aOrigem=el('aOrigem');
-const aWeek=el('aWeek'),aMonth=el('aMonth'),aCarrier=el('aCarrier'),aTipo=el('aTipo'),aSearch=el('aSearch');
+const aWeek=el('aWeek'),aMonth=el('aMonth'),aTipo=el('aTipo'),aSearch=el('aSearch');
 let A=D.insp;   // origem ativa das anomalias: D.insp = pré-uso ; D.anomAud = auditoria (Miguel)
+// Filtro de transportadora MULTI-SELEÇÃO (checkboxes). aCarrierSel vazio = Todas.
+const aCarrierBtn=el('aCarrierBtn'),aCarrierPanel=el('aCarrierPanel'),aCarrierList=el('aCarrierList'),aCarrierSearch=el('aCarrierSearch');
+let aCarrierSel=new Set();
+function aCarrierLabel(){aCarrierBtn.textContent=aCarrierSel.size===0?'Todas':(aCarrierSel.size===1?(A.carriers[[...aCarrierSel][0]]||'1 selecionada'):(aCarrierSel.size+' selecionadas'));}
+function fillACarrier(){aCarrierSel.clear();aCarrierList.innerHTML='';
+  A.carriers.map((c,i)=>[c,i]).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([c,i])=>{
+    const lab=document.createElement('label');lab.className='msItem';
+    lab.innerHTML='<input type="checkbox" value="'+i+'"><span>'+esc(c)+'</span>';
+    lab.firstChild.addEventListener('change',function(){if(this.checked)aCarrierSel.add(+this.value);else aCarrierSel.delete(+this.value);aCarrierLabel();page3=0;render3();});
+    aCarrierList.appendChild(lab);});
+  if(aCarrierSearch)aCarrierSearch.value='';aCarrierLabel();}
+function aCarrierClear(){aCarrierSel.clear();aCarrierList.querySelectorAll('input').forEach(c=>c.checked=false);if(aCarrierSearch)aCarrierSearch.value='';aCarrierList.querySelectorAll('.msItem').forEach(it=>it.style.display='');aCarrierLabel();aCarrierPanel.hidden=true;}
+aCarrierBtn.addEventListener('click',function(e){e.stopPropagation();aCarrierPanel.hidden=!aCarrierPanel.hidden;});
+document.addEventListener('click',function(e){if(!el('aCarrierMs').contains(e.target))aCarrierPanel.hidden=true;});
+aCarrierSearch.addEventListener('input',function(){const q=this.value.trim().toUpperCase();aCarrierList.querySelectorAll('.msItem').forEach(it=>{it.style.display=it.textContent.toUpperCase().includes(q)?'':'none';});});
 function fillAnomFilters(){
-  aWeek.innerHTML='';aMonth.innerHTML='';aCarrier.innerHTML='';aTipo.innerHTML='';
+  aWeek.innerHTML='';aMonth.innerHTML='';aTipo.innerHTML='';
   opt(aWeek,'','Todas'); A.weeks.forEach(w=>opt(aWeek,w,w));
   opt(aMonth,'','Todos'); A.months.forEach(m=>opt(aMonth,m,m));
-  opt(aCarrier,'','Todas'); A.carriers.map((c,i)=>[c,i]).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([c,i])=>opt(aCarrier,i,c));
+  fillACarrier();
   opt(aTipo,'','Todos'); A.tipos.map((t,i)=>[t,i]).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([t,i])=>opt(aTipo,i,t));
 }
 fillAnomFilters();
-function aggFilterA(mi,ci,ti,wi){return A.agg.filter(a=>(mi<0||a[1]===mi)&&(ci<0||a[0]===ci)&&(ti<0||a[2]===ti)&&(wi==null||wi<0||a[5]===wi))}
+function aggFilterA(mi,ti,wi){return A.agg.filter(a=>(mi<0||a[1]===mi)&&(aCarrierSel.size===0||aCarrierSel.has(a[0]))&&(ti<0||a[2]===ti)&&(wi==null||wi<0||a[5]===wi))}
 let page3=0,filtered3=[],chOkNok,chItems,chAnCar,chRate,chGroup,chTipo,chEvol;
 if(aOrigem)aOrigem.addEventListener('change',()=>{A=(aOrigem.value==='aud'?(D.anomAud||D.insp):D.insp);fillAnomFilters();aSearch.value='';page3=0;render3()});
-[aWeek,aMonth,aCarrier,aTipo].forEach(s=>s.addEventListener('change',()=>{page3=0;render3()}));
+[aWeek,aMonth,aTipo].forEach(s=>s.addEventListener('change',()=>{page3=0;render3()}));
 aSearch.addEventListener('input',()=>{page3=0;render3()});
-el('aReset').onclick=()=>{[aWeek,aMonth,aCarrier,aTipo].forEach(s=>s.value='');aSearch.value='';page3=0;render3()};
+el('aReset').onclick=()=>{[aWeek,aMonth,aTipo].forEach(s=>s.value='');aCarrierClear();aSearch.value='';page3=0;render3()};
 el('aCsv').onclick=()=>{const h=['Identificador','Tipo','Transportadora','Usuario','Data checklist','Placa carreta','VRID','Itens NOK'];const L=[h.join(';')];
   filtered3.forEach(r=>L.push([r[0],A.tipos[r[1]],A.carriers[r[2]],r[3],r[4],r[5],r[6],r[8].map(k=>A.items[k]).join(' | ')].map(x=>'"'+String(x==null?'':x).replace(/"/g,'""')+'"').join(';')));dl(L.join('\n'),(aOrigem&&aOrigem.value==='aud'?'anomalias_auditoria.csv':'inspecoes_anomalias.csv'));};
 el('prev3').onclick=()=>{if(page3>0){page3--;drawTable3()}};
@@ -677,12 +702,12 @@ function barH(canvas,labels,data,color,fmt){return new Chart(el(canvas),{type:'b
   options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
     datalabels:{display:true,anchor:'end',align:'right',color:'#374151',font:{weight:'bold',size:10},formatter:fmt||((v)=>v)}},scales:{x:{beginAtZero:true}}}});}
 function render3(){
-  const wi=aWeek.value===''?-1:A.weeks.indexOf(aWeek.value), mi=aMonth.value===''?-1:A.months.indexOf(aMonth.value), ci=aCarrier.value===''?-1:+aCarrier.value, ti=aTipo.value===''?-1:+aTipo.value;
-  const fa=aggFilterA(mi,ci,ti,wi);
+  const wi=aWeek.value===''?-1:A.weeks.indexOf(aWeek.value), mi=aMonth.value===''?-1:A.months.indexOf(aMonth.value), ti=aTipo.value===''?-1:+aTipo.value;
+  const fa=aggFilterA(mi,ti,wi);
   const tot=fa.length, nok=fa.filter(a=>a[4]===1).length, ok=tot-nok;
   // nokRows filtrados
   const nq=aSearch.value.trim().toUpperCase();
-  const nf=A.nokRows.filter(r=>(mi<0||r[7]===mi)&&(ci<0||r[2]===ci)&&(ti<0||r[1]===ti)&&(wi<0||r[9]===wi));
+  const nf=A.nokRows.filter(r=>(mi<0||r[7]===mi)&&(aCarrierSel.size===0||aCarrierSel.has(r[2]))&&(ti<0||r[1]===ti)&&(wi<0||r[9]===wi));
   const nItens=nf.reduce((s,r)=>s+r[8].length,0);
   const carrSet=new Set(nf.map(r=>r[2]));
   el('kpis3').innerHTML='';
