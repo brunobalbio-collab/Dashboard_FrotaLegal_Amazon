@@ -1128,7 +1128,7 @@ def write_xlsx(detail, out, plc_info=None, fuel_info=None):
     wb.save(out)
 
 # ================= saida HTML =================
-def write_html(detail, insp_info, placas_info, plc_info, fuel_info, bases, resumo, sem_cad, anom_aud, ativas, out):
+def write_html(detail, insp_info, placas_info, plc_info, fuel_info, bases, resumo, sem_cad, anom_aud, ativas, anom_pre, out):
     tpl=open(os.path.join(SUP,"template.html"),encoding="utf-8").read()
     chart=open(os.path.join(SUP,"chart.umd.js"),encoding="utf-8").read()
     dlab=open(os.path.join(SUP,"datalabels.min.js"),encoding="utf-8").read()
@@ -1173,6 +1173,7 @@ def write_html(detail, insp_info, placas_info, plc_info, fuel_info, bases, resum
           "carriers":carriers,"weeks":wsorted,"months":msorted,"rows":rows,
           "insp":_proc(insp_info)}
     data["anomAud"]=_proc(anom_aud)          # Melhoria 2: anomalias de auditoria (Miguel)
+    data["anomPre"]=_proc(anom_pre); data["anomPre"]["semRows"]=[]   # Anomalias pre-uso c/ transportadora da viagem (so a aba Anomalias usa)
     data["semCad"]=sem_cad                    # Melhoria 1: veiculos sem cadastro (ASDFG)
     # ---- aba 4: Sem Espelhamento ---- (row: [vrid, carrierIdx, route, dataStr, sc, weekIdx, monthIdx])
     P=placas_info
@@ -1312,6 +1313,46 @@ def build_anom_aud(insp_seg, week_of):
     _iv,_ip,info=build_insp_info(recs, itemgrp, week_of)
     return info
 
+# ---- Transportadora das ANOMALIAS (regra pedida pelo cliente) ----
+# Pre-uso: usa a transportadora da VIAGEM (Amazon), igual a aba de aderencia -> casada por
+#   VRID; se nao casar, por placa; se nem a placa casar, mantem a do checklist.
+# Miguel (auditoria): usa a transportadora que ele indicou no checklist; em branco -> cadastro
+#   (Equipamentos) pela placa; ASDFG (sc) mantem a que ele digitou na observacao.
+def carrier_maps(triples):
+    """De (vrid, carrier, placa) das viagens: by_vrid (1 por VRID) e by_plate (carrier predominante)."""
+    by_vrid={}; _pc={}
+    for v,car,pl in triples:
+        if not car: continue
+        vv=nvr(v)
+        if vv and vv not in by_vrid: by_vrid[vv]=car
+        p=npl(pl)
+        if p:
+            d=_pc.setdefault(p,{}); d[car]=d.get(car,0)+1
+    by_plate={p:max(c.items(),key=lambda kv:(kv[1],kv[0]))[0] for p,c in _pc.items()}
+    return by_vrid, by_plate
+def remap_preuso_carrier(records, by_vrid, by_plate):
+    out=[]
+    for r in records:
+        r=dict(r)
+        car=by_vrid.get(nvr(r.get("vrid","")))
+        if not car: car=by_plate.get(npl(r.get("ident","")))
+        if car: r["transp"]=car
+        out.append(r)
+    return out
+def cadastro_carrier_map(equip):
+    return {npl(e.get("ident","")):e.get("transp","") for e in (equip or [])
+            if e.get("transp") and str(e.get("transp")).strip() not in ("","(sem transp.)")}
+def remap_miguel_carrier(records, cad_by_plate):
+    out=[]
+    for r in records:
+        r=dict(r)
+        t=str(r.get("transp","") or "").strip()
+        if (not t or t=="(sem transp.)") and not r.get("sc"):
+            c=cad_by_plate.get(npl(r.get("ident","")))
+            if c: r["transp"]=c
+        out.append(r)
+    return out
+
 def build_all(b):
     """A partir do banco carregado, constroi detail, insp_info e placas_info."""
     b=apply_filters(b)
@@ -1329,8 +1370,11 @@ def build_all(b):
     bases = build_bases({**b,"insp_seg":seg_aud}, insp_info)
     resumo = build_resumo(detail, seg_aud, insp_info, placas_info, plc_info, fuel_info, ativas_info)
     sem_cad = build_sem_cad(b.get("sem_cad",[]))
-    anom_aud = build_anom_aud(seg_aud, week_of)
-    return detail, insp_info, placas_info, plc_info, fuel_info, bases, resumo, sem_cad, anom_aud, ativas_info
+    # Aba Anomalias (so ela): transportadora da viagem p/ pre-uso; cadastro como fallback p/ Miguel.
+    _bv,_bp = carrier_maps((d[0],d[1],d[5]) for d in detail)
+    _,_,anom_pre_info = build_insp_info(remap_preuso_carrier(b.get("insp",[]), _bv, _bp), b["itens"], week_of)
+    anom_aud = build_anom_aud(remap_miguel_carrier(seg_aud, cadastro_carrier_map(b.get("equip",[]))), week_of)
+    return detail, insp_info, placas_info, plc_info, fuel_info, bases, resumo, sem_cad, anom_aud, ativas_info, anom_pre_info
 
 def main():
     b=load_banco()
@@ -1339,9 +1383,9 @@ def main():
     if not b["viagens"] or not b["insp"]:
         log("ERRO: banco vazio (sem viagens ou inspecoes)."); sys.exit(2)
     log("Ingerido:", add)
-    detail, insp_info, placas_info, plc_info, fuel_info, bases, resumo, sem_cad, anom_aud, ativas_info = build_all(b)
+    detail, insp_info, placas_info, plc_info, fuel_info, bases, resumo, sem_cad, anom_aud, ativas_info, anom_pre_info = build_all(b)
     ho=os.path.join(BASE,"Farol_Amazon.html")
-    write_html(detail, insp_info, placas_info, plc_info, fuel_info, bases, resumo, sem_cad, anom_aud, ativas_info, ho)
+    write_html(detail, insp_info, placas_info, plc_info, fuel_info, bases, resumo, sem_cad, anom_aud, ativas_info, anom_pre_info, ho)
     c=defaultdict(int)
     for d in detail: c[LBL[d[11]]]+=1
     tot=len(detail); ev=tot-c[SDAT] or 1

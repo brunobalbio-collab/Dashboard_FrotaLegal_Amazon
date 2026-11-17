@@ -192,7 +192,7 @@ def parse_novo(dd):
 # ----------------------------------------------------------------------------
 # 4. Monta o payload (replica write_html, com esp congelado)
 # ----------------------------------------------------------------------------
-def build_payload(D, detail, insp_info, plc_info, fuel_info, bases, resumo, sem_cad, anom_aud, ativas):
+def build_payload(D, detail, insp_info, plc_info, fuel_info, bases, resumo, sem_cad, anom_aud, ativas, anom_pre=None):
     MESES = E.MESES; LBL = E.LBL; ADER, FORA, SEMI, SDAT = E.ADER, E.FORA, E.SEMI, E.SDAT
     carriers = []; ci = {}; weeks = []; wi = {}; months = []; mi = {}
     def cidx(c):
@@ -234,6 +234,8 @@ def build_payload(D, detail, insp_info, plc_info, fuel_info, bases, resumo, sem_
             "carriers": carriers, "weeks": wsorted, "months": msorted, "rows": rows,
             "insp": _proc(insp_info)}
     data["anomAud"] = _proc(anom_aud)
+    if anom_pre is not None:
+        data["anomPre"] = _proc(anom_pre); data["anomPre"]["semRows"] = []   # pre-uso c/ transportadora da viagem (so a aba Anomalias)
     data["semCad"] = sem_cad
     data["esp"] = D["esp"]                      # aba Sem Espelhamento: congelada da base
     data["plc"] = plc_info; data["fuel"] = fuel_info; data["bases"] = bases
@@ -329,10 +331,14 @@ def main():
     placas_stub = {"total": D["esp"]["total"], "cat": D["esp"]["cat"]}
     resumo = E.build_resumo(detail, seg_aud, insp_info, placas_stub, plc_info, fuel_info, ativas_info)
     sem_cad = E.build_sem_cad(sem_cad_recs)
-    anom_aud = E.build_anom_aud(seg_aud, week_of)
+    # Aba Anomalias (so ela): transportadora da VIAGEM p/ pre-uso (regra da aderencia: VRID->placa->
+    # checklist) e, p/ Miguel, cadastro (Equipamentos) quando ele nao indicou. Nao afeta bases/resumo.
+    _bv, _bp = E.carrier_maps((d[0], d[1], d[5]) for d in detail)
+    _, _, anom_pre_info = E.build_insp_info(E.remap_preuso_carrier(insp, _bv, _bp), itens, week_of)
+    anom_aud = E.build_anom_aud(E.remap_miguel_carrier(seg_aud, E.cadastro_carrier_map(bf["equip"])), week_of)
 
     # ---- payload -> index.html ----
-    data = build_payload(D, detail, insp_info, plc_info, fuel_info, bases, resumo, sem_cad, anom_aud, ativas_info)
+    data = build_payload(D, detail, insp_info, plc_info, fuel_info, bases, resumo, sem_cad, anom_aud, ativas_info, anom_pre_info)
     pj = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     new_html = re.sub(r'(<script id="payload" type="application/json">).*?(</script>)',
                       lambda m: m.group(1) + pj + m.group(2), base_html, count=1, flags=re.S)

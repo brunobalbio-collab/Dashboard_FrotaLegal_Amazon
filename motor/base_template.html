@@ -664,7 +664,7 @@ function drawTable2(){
 // ================= ABA 3 (ANOMALIAS) =================
 const aOrigem=el('aOrigem');
 const aWeek=el('aWeek'),aMonth=el('aMonth'),aTipo=el('aTipo'),aSearch=el('aSearch');
-let A=D.insp;   // origem ativa das anomalias: D.insp = pré-uso ; D.anomAud = auditoria (Miguel)
+let A=(D.anomPre||D.insp);   // origem ativa das anomalias: pré-uso = D.anomPre (transportadora da viagem) ; auditoria = D.anomAud (Miguel)
 // Filtro de transportadora MULTI-SELEÇÃO (checkboxes). aCarrierSel vazio = Todas.
 const aCarrierBtn=el('aCarrierBtn'),aCarrierPanel=el('aCarrierPanel'),aCarrierList=el('aCarrierList'),aCarrierSearch=el('aCarrierSearch');
 let aCarrierSel=new Set();
@@ -690,7 +690,7 @@ function fillAnomFilters(){
 fillAnomFilters();
 function aggFilterA(mi,ti,wi){return A.agg.filter(a=>(mi<0||a[1]===mi)&&(aCarrierSel.size===0||aCarrierSel.has(a[0]))&&(ti<0||a[2]===ti)&&(wi==null||wi<0||a[5]===wi))}
 let page3=0,filtered3=[],chOkNok,chItems,chAnCar,chRate,chGroup,chTipo,chEvol;
-if(aOrigem)aOrigem.addEventListener('change',()=>{A=(aOrigem.value==='aud'?(D.anomAud||D.insp):D.insp);fillAnomFilters();aSearch.value='';page3=0;render3()});
+if(aOrigem)aOrigem.addEventListener('change',()=>{A=(aOrigem.value==='aud'?(D.anomAud||D.insp):(D.anomPre||D.insp));fillAnomFilters();aSearch.value='';page3=0;render3()});
 [aWeek,aMonth,aTipo].forEach(s=>s.addEventListener('change',()=>{page3=0;render3()}));
 aSearch.addEventListener('input',()=>{page3=0;render3()});
 el('aReset').onclick=()=>{[aWeek,aMonth,aTipo].forEach(s=>s.value='');aCarrierClear();aSearch.value='';page3=0;render3()};
